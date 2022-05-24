@@ -40,6 +40,6 @@ def retrieve_quote():
 def index():
     return render_template('index.html')
 
-# Make functions available to web tempalte
+# Make functions available to web template
 app.jinja_env.globals.update(retrieve_time=retrieve_time)
 app.jinja_env.globals.update(retrieve_quote=retrieve_quote)
