@@ -1,14 +1,28 @@
 import logging
+from sys import exc_info
 import json
 import requests
 import os
 from flask import Flask, render_template, request, redirect
+from opencensus.ext.azure.log_exporter import AzureLogHandler
+from azure.identity import DefaultAzureCredential
+from azure.keyvault.secrets import SecretClient
 
 # Setup up a Flask instance
 app = Flask(__name__)
 
-# Retrieve the time from an open API
-def retrieve_time():
+# Setup logging mechanism
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+)
+logger = logging.getLogger(__name__)
+logger.addHandler(AzureLogHandler(
+    connection_string=os.getenv('APPLICATIONINSIGHTS_CONNECTION_STRING'))
+)
+
+# Get the time from a public API on the Internet
+def get_time():
     try:
         response = requests.get(
             url="http://worldclockapi.com/api/json/utc/now"
@@ -20,20 +34,30 @@ def retrieve_time():
             logging.error(f"Error querying API.  Status code: {response.status_code}")
     except Exception:
         return "Retrieving time failed"
+    
+# Get Key Vault secret
+def get_secret():
 
-# Retrieve a Breaking Bad quote
-def retrieve_quote():
+    VAULT_NAME = os.getenv('KEY_VAULT_NAME')
+    KEY_VAULT_SECRET_NAME = os.getenv('KEY_VAULT_SECRET_NAME')
     try:
-        response = requests.get(
-            url="https://breaking-bad-quotes.herokuapp.com/v1/quotes"
-        )
-        if response.status_code == 200:
-            quote = (json.loads(response.text))[0]['quote']
-            return quote
+        if 'MSI_CLIENT_ID':
+            credential = DefaultAzureCredential(
+                managed_identity_client_id=os.getenv('MSI_CLIENT_ID')
+            )
         else:
-            logging.error(f"Error querying API.  Status code: {response.status_code}")
+            raise Exception
     except Exception:
-        return "Retrieving quote failed"
+        return "Unable to obtain access token"
+        logger.error('Failed to obtain access token', exc_info=True)
+    try:
+        secret_client = SecretClient(
+            vault_url=f"https://{VAULT_NAME}.vault.azure.net/", credential=credential)
+        secret = secret_client.get_secret(f"{KEY_VAULT_SECRET_NAME}")
+        return secret.value
+    except Exception:
+        return "Unable to obtain the secret"
+        logger.error('Failed to get secret', exc_info=True)
 
 # Render the template
 @app.route("/")
@@ -41,5 +65,5 @@ def index():
     return render_template('index.html')
 
 # Make functions available to web template
-app.jinja_env.globals.update(retrieve_time=retrieve_time)
-app.jinja_env.globals.update(retrieve_quote=retrieve_quote)
+app.jinja_env.globals.update(get_time=get_time)
+app.jinja_env.globals.update(get_secret=get_secret)
