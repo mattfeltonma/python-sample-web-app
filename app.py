@@ -32,8 +32,9 @@ def query_time():
         logging.info('Successfully queried public API')
         return time
     else:
-        raise Exception(
-            f"Failed to query time API. Status code was: {response.status_code}")
+        return "Unavailable"
+        #raise Exception(
+        #    f"Failed to query time API. Status code was: {response.status_code}")
         logger.error(
             f"Error querying API.  Status code: {response.status_code}")
 
