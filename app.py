@@ -18,6 +18,7 @@ logger.addHandler(AzureLogHandler(
     connection_string=os.getenv('APPLICATIONINSIGHTS_CONNECTION_STRING'))
 )
 
+
 # Setup up a Flask instance
 app = Flask(__name__)
 
