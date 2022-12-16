@@ -24,20 +24,24 @@ app = Flask(__name__)
 
 # Obtain time from public api
 def query_time():
-    response = requests.get(
-        url="http://worldclockapi.com/api/json/utc/now"
-    )
+    try:
+        response = requests.get(
+            url="http://worldtimeapi.org/api/timezone/america/new_york",
+            timeout=5
+        )
 
-    if response.status_code == 200:
-        time = (json.loads(response.text))['currentDateTime']
-        logging.info('Successfully queried public API')
-        return time
-    else:
+        if response.status_code == 200:
+            time = (json.loads(response.text))['datetime']
+            logger.info('Successfully queried public API')
+            return time
+        elif response.status_code != 200:
+            logger.error(
+                f"Error querying API.  Status code: {response.status_code}")
+            return "Unavailable"
+            
+    except Exception:
+        logger.error('Failed to contact public api', exc_info=True)
         return "Unavailable"
-        #raise Exception(
-        #    f"Failed to query time API. Status code was: {response.status_code}")
-        logger.error(
-            f"Error querying API.  Status code: {response.status_code}")
 
 # Get Key Vault secret
 def get_secret():
@@ -52,25 +56,33 @@ def get_secret():
         else:
             raise Exception
     except Exception:
+        logger.error('Failed to obtain access token', exc_info=True)
         raise Exception(
             'Failed to obtain access token'
         )
-        logger.error('Failed to obtain access token', exc_info=True)
+
     try:
         secret_client = SecretClient(
             vault_url=f"https://{VAULT_NAME}.vault.azure.net/", credential=credential)
         secret = secret_client.get_secret(f"{KEY_VAULT_SECRET_NAME}")
         return secret.value
     except Exception:
+        logger.error('Failed to get secret', exc_info=True)
         raise Exception(
             'Failed to get secret'
         )
-        logger.error('Failed to get secret', exc_info=True)
 
+def get_ip(web_request):
+    if 'X-Forwarded-For' in web_request.headers:
+        xforwardfor = web_request.headers['X-Forwarded-For']
+        return web_request.remote_addr + f" and X-Forwarded-For header value of {xforwardfor}"
+    else:
+        return web_request.remote_addr
 
 # Render the template
 @app.route("/")
 def index():
+    ipinfo = get_ip(web_request=request)
     wordoftheday = get_secret()
     todaystime = query_time()
-    return render_template('index.html', wordoftheday=wordoftheday, time=todaystime)
+    return render_template('index.html', wordoftheday=wordoftheday, time=todaystime, ip=ipinfo)
